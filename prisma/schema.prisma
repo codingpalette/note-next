@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// 기존 Auth.js 관련 모델
+model User {
+  id            String          @id @default(cuid())
+  name          String?
+  email         String          @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  Authenticator Authenticator[]
+  notes         Note[]          // 사용자가 작성한 노트
+  categories    Category[]      // 사용자가 생성한 카테고리
+  tags          Tag[]           // 사용자가 생성한 태그
+  sharedNotes   Share[]         // 공유된 노트
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model Authenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
+}
+
+// 노트 모델
+model Note {
+  id          String       @id @default(cuid())
+  title       String       // 노트 제목
+  content     String?      // 노트 내용 (리치 텍스트를 JSON 문자열로 저장 가능)
+  userId      String       // 작성자
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId    String?      // 부모 노트 ID (계층 구조)
+  parent      Note?        @relation("NoteHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Note[]       @relation("NoteHierarchy") // 하위 노트
+  categoryId  String?      // 카테고리 (선택적)
+  category    Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags        NoteTags[]   @relation("NoteToTags") // 태그 (NoteTags를 통해 연결)
+  attachments Attachment[] // 첨부 파일
+  shares      Share[]      // 공유 정보
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// 카테고리 모델
+model Category {
+  id        String    @id @default(cuid())
+  name      String    // 카테고리 이름
+  userId    String    // 작성자
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes     Note[]    // 카테고리에 속한 노트
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// 태그 모델
+model Tag {
+  id        String    @id @default(cuid())
+  name      String    // 태그 이름
+  userId    String    // 작성자
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes     NoteTags[] @relation("TagToNotes") // 노트 (NoteTags를 통해 연결)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, name]) // 사용자별로 태그 이름 고유
+}
+
+// 노트와 태그 간 다대다 관계
+model NoteTags {
+  noteId String
+  tagId  String
+  note   Note   @relation("NoteToTags", fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation("TagToNotes", fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+// 첨부 파일 모델
+model Attachment {
+  id        String    @id @default(cuid())
+  noteId    String    // 첨부된 노트
+  note      Note      @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  url       String    // 파일 URL (예: Firebase Storage URL)
+  fileName  String    // 파일 이름
+  fileType  String    // 파일 타입 (예: image/png, application/pdf)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// 공유 모델 (선택적)
+model Share {
+  id        String    @id @default(cuid())
+  noteId    String    // 공유된 노트
+  note      Note      @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  userId    String    // 공유받은 사용자
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String    // 권한 (예: "viewer", "editor")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([noteId, userId]) // 동일한 노트를 동일한 사용자에게 중복 공유 방지
+}

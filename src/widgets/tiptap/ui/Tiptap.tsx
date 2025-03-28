@@ -16,6 +16,7 @@ interface TipTapProps {
 export function TipTap({ content, onChangeContent }: TipTapProps) {
   const editor = useEditor({
     extensions,
+    immediatelyRender: false,
     content: content || '<p>내용을 입력하세요...</p>',
     onUpdate: ({ editor }) => {
       if (onChangeContent) {
